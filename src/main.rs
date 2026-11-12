@@ -1,5 +1,6 @@
 use std::fmt::{self, Display};
 use std::io::{self, Write};
+use std::task;
 
 #[derive(Debug,PartialEq)]
 enum Priority {
@@ -44,8 +45,11 @@ impl TaskList{
     fn list(&self){
         print_all(&self.tasks);
     }
-    fn done(&mut self, id:u32){
-        self.tasks.iter_mut().for_each(|task| if task.id == id{ task.done = true })
+    fn done(&mut self, id:u32) -> Result<(),ParseError>{
+        match self.tasks.iter_mut().find(|task| task.id == id){
+            Some(task) => {task.done = true; Ok(())},
+            None => Err(ParseError::InvalidTaskId),
+        }
     }
     fn remove(&mut self, id:u32) -> Result<(),ParseError>{
         match self.tasks.iter().position(|t| t.id == id) {
@@ -180,20 +184,23 @@ fn main() {
         print!("> ");
         io::stdout().flush().unwrap();
         let mut user_input = String::new();
-        io::stdin().read_line(&mut user_input).expect("Failed to read line");
+        let bytes = io::stdin().read_line(&mut user_input).expect("Failed to read line");
+        if bytes == 0 {println!(); break;}
+
+        if user_input.trim().is_empty(){
+            continue;
+        }
+
         let command = parse_command(&user_input);
 
         match command {
             Ok(command) => match command {
-                Command::Add(priority,task_text) => task_list.add(task_text, priority),
-                Command::List => task_list.list(),
-                Command::Done(id) => task_list.done(id),
-                Command::Remove(id) => match task_list.remove(id) {
-                    Ok(del) => println!("Task deleted"),
-                    Err(error) => println!("{error:?}")
-                },
-                Command::Filter(priority) => task_list.filter(priority),
-                Command::Stats => task_list.stats(),
+                Command::Add(priority,task_text) => {println!("Task added"); task_list.add(task_text, priority) },
+                Command::List                                      => task_list.list(),
+                Command::Done(id)                             => match task_list.done(id){ Ok(task)=>println!("task {id} completed"),Err(error) => println!("{error:?}")},
+                Command::Remove(id)                           => match task_list.remove(id) {Ok(del) => println!("Task deleted"), Err(error) => println!("{error:?}")},
+                Command::Filter(priority)                => task_list.filter(priority),
+                Command::Stats                                     => task_list.stats(),
                 Command::Quit => break
             },
             Err(error) => println!("{:?}",error) 
